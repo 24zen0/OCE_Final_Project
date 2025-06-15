@@ -46,4 +46,3 @@ if robot_type.startswith("PF"):
 else:
     print("Error: Unknown robot type", robot_type)
     sys.exit(1)
-   

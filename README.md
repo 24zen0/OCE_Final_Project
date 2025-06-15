@@ -12,6 +12,7 @@ This repository provides a template for training point-foot legged robots, built
 1. Activate conda env
    - `conda activate pointfoot_legged_gym`
 2. Install Isaac Gym
+   download the isaac gym from the official website first,create an ACR file in home, and move the file called isaacgym into ACR:
    - `cd ~/ACR/isaacgym/python && pip install -e .`
    - Try running an example `cd examples && python 1080_balls_of_solitude.py`
 3. Install rsl_rl (PPO implementation)

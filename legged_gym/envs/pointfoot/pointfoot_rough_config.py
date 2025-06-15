@@ -138,14 +138,14 @@ class PointFootRoughCfg(BaseConfig):
     class rewards:
         class scales:
             action_rate = -0.01
-            ang_vel_xy = -0.05
-            base_height = -2.0
-            collision = -50.0
+            ang_vel_xy = -0.5
+            base_height = -10.0
+            collision = -5.0
             dof_acc = -2.5e-07
-            feet_air_time = 0.0
-            torque_limits = -0.1
+            feet_air_time = 0.5
+            torque_limits = -0.5
             torques = -2.5e-05
-            feet_distance = -100
+            feet_distance = -10
             survival = 1
 
         base_height_target = 0.62
@@ -157,7 +157,7 @@ class PointFootRoughCfg(BaseConfig):
         min_feet_distance = 0.1
         min_feet_air_time = 0.25
         max_feet_air_time = 0.65
-        tracking_sigma = 0.25  # tracking reward = exp(-error^2/sigma)
+        tracking_sigma = 0.5  # tracking reward = exp(-error^2/sigma)
 
     class normalization:
         class obs_scales:

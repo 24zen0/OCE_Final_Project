@@ -13,6 +13,7 @@ from legged_gym.utils.terrain import Terrain
 
 
 class PointFoot:
+    # 初始化环境和仿真参数
     def __init__(self, cfg, sim_params, physics_engine, sim_device, headless):
         """ Parses the provided config file,
             calls create_sim() (which creates, simulation, terrain and environments),
@@ -96,12 +97,15 @@ class PointFoot:
         self._prepare_reward_function()
         self.init_done = True
 
+    # 获取本体观测
     def get_observations(self):
         return self.proprioceptive_obs_buf
 
+    # 获取特权观测
     def get_privileged_observations(self):
         return self.privileged_obs_buf
 
+    # 重置所有机器人
     def reset(self):
         """ Reset all robots"""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
@@ -109,6 +113,7 @@ class PointFoot:
             torch.zeros(self.num_envs, self.num_actions, device=self.device, requires_grad=False))
         return obs, privileged_obs
 
+    # 渲染环境
     def render(self, sync_frame_time=True):
         if self.viewer:
             # check for window closed
@@ -135,6 +140,7 @@ class PointFoot:
             else:
                 self.gym.poll_viewer_events(self.viewer)
 
+    # 执行动作并推进仿真
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()
 
@@ -160,6 +166,7 @@ class PointFoot:
             self.privileged_obs_buf = torch.clip(self.privileged_obs_buf, -clip_obs, clip_obs)
         return self.proprioceptive_obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
+    # 物理仿真后处理
     def post_physics_step(self):
         """ check terminations, compute observations and rewards
             calls self._post_physics_step_callback() for common computations
@@ -197,6 +204,7 @@ class PointFoot:
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
 
+    # 检查是否包含足部高度奖励
     def _check_if_include_feet_height_rewards(self):
         members = [attr for attr in dir(self.cfg.rewards.scales) if not attr.startswith("__")]
         for scale in members:
@@ -204,6 +212,7 @@ class PointFoot:
                 return True
         return False
 
+    # 检查终止条件
     def check_termination(self):
         """ Check if environments need to be reset
         """
@@ -212,6 +221,7 @@ class PointFoot:
         self.time_out_buf = self.episode_length_buf > self.max_episode_length  # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
 
+    # 重置指定环境
     def reset_idx(self, env_ids):
         """ Reset some environments.
             Calls self._reset_dofs(env_ids), self._reset_root_states(env_ids), and self._resample_commands(env_ids)
@@ -253,6 +263,7 @@ class PointFoot:
         if self.cfg.env.send_timeouts:
             self.extras["time_outs"] = self.time_out_buf
 
+    # 重置相关缓存
     def _reset_buffers(self, env_ids):
         # reset buffers
         self.last_actions[env_ids] = 0.
@@ -264,6 +275,7 @@ class PointFoot:
         self.episode_length_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
 
+    # 计算奖励
     def compute_reward(self):
         """ Compute rewards
             Calls each reward function which had a non-zero scale (processed in self._prepare_reward_function())
@@ -283,6 +295,7 @@ class PointFoot:
             self.rew_buf += rew
             self.episode_sums["termination"] += rew
 
+    # 计算观测
     def compute_observations(self):
         """ Computes observations
         """
@@ -291,6 +304,7 @@ class PointFoot:
 
         self._add_noise_to_obs()
 
+    # 给观测添加噪声
     def _add_noise_to_obs(self):
         # add noise if needed
         if self.add_noise:
@@ -302,6 +316,7 @@ class PointFoot:
                     self.privileged_obs_buf[:, len(self.noise_scale_vec[0]):]) - 1) * privileged_extra_obs_noise_vec
                 self.privileged_obs_buf += torch.cat((obs_noise_buf, privileged_extra_obs_buf), dim=1)
 
+    # 计算特权观测
     def compute_privileged_observations(self):
         if self.num_privileged_obs is not None:
             self._compose_privileged_obs_buf_no_height_measure()
@@ -312,6 +327,7 @@ class PointFoot:
                 raise RuntimeError(
                     f"privileged_obs_buf size ({self.privileged_obs_buf.shape[1]}) does not match num_privileged_obs ({self.num_privileged_obs})")
 
+    # 组装特权观测（不含高度信息）
     def _compose_privileged_obs_buf_no_height_measure(self):
         self.privileged_obs_buf = torch.cat((self.base_ang_vel * self.obs_scales.ang_vel,
                                              self.projected_gravity,
@@ -320,7 +336,8 @@ class PointFoot:
                                              self.actions,
                                              self.commands[:, :3] * self.commands_scale,
                                              ), dim=-1)
-
+# about percepting its own body
+    # 计算本体观测
     def compute_proprioceptive_observations(self):
         self._compose_proprioceptive_obs_buf_no_height_measure()
         if self.cfg.terrain.measure_heights_actor:
@@ -329,6 +346,7 @@ class PointFoot:
             raise RuntimeError(
                 f"obs_buf size ({self.proprioceptive_obs_buf.shape[1]}) does not match num_obs ({self.num_obs})")
 
+    # 给观测添加高度信息
     def _add_height_measure_to_buf(self, buf):
         heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1,
                              1.) * self.obs_scales.height_measurements
@@ -337,6 +355,7 @@ class PointFoot:
         )
         return buf
 
+    # 组装本体观测（不含高度信息）
     def _compose_proprioceptive_obs_buf_no_height_measure(self):
         self.proprioceptive_obs_buf = torch.cat((self.base_ang_vel * self.obs_scales.ang_vel,
                                                  self.projected_gravity,
@@ -346,6 +365,7 @@ class PointFoot:
                                                  self.commands[:, :3] * self.commands_scale,
                                                  ), dim=-1)
 
+    # 创建仿真、地形和环境
     def create_sim(self):
         """ Creates simulation, terrain and environments
         """
@@ -365,6 +385,7 @@ class PointFoot:
             raise ValueError("Terrain mesh type not recognised. Allowed types are [None, plane, heightfield, trimesh]")
         self._create_envs()
 
+    # 设置摄像机位置和朝向
     def set_camera(self, position, lookat):
         """ Set camera position and direction
         """
@@ -373,6 +394,7 @@ class PointFoot:
         self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
 
     # ------------- Callbacks --------------
+    # 处理刚体形状属性（可用于随机化摩擦系数）
     def _process_rigid_shape_props(self, props, env_id):
         """ Callback allowing to store/change/randomize the rigid shape properties of each environment.
             Called During environment creation.
@@ -399,6 +421,7 @@ class PointFoot:
                 props[s].friction = self.friction_coeffs[env_id]
         return props
 
+    # 处理关节属性（可用于记录/随机化关节参数）
     def _process_dof_props(self, props, env_id):
         """ Callback allowing to store/change/randomize the DOF properties of each environment.
             Called During environment creation.
@@ -428,6 +451,7 @@ class PointFoot:
                 self.dof_pos_limits[i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
         return props
 
+    # 处理刚体属性（可用于随机化质量和质心）
     def _process_rigid_body_props(self, props, env_id):
         # randomize base mass
         if self.cfg.domain_rand.randomize_base_mass:
@@ -441,6 +465,7 @@ class PointFoot:
             props[0].com.z += np.random.uniform(-com_z, com_z)
         return props
 
+    # 物理仿真后回调
     def _post_physics_step_callback(self):
         """ Callback called before computing terminations, rewards, and observations
             Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
@@ -457,9 +482,11 @@ class PointFoot:
         if self.cfg.domain_rand.push_robots and (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
             self._push_robots()
 
+    # 重新采样命令
     def _resample(self, env_ids):
         self._resample_commands(env_ids)
 
+    # 重新采样动作命令
     def _resample_commands(self, env_ids):
         """ Randommly select commands of some environments
 
@@ -484,6 +511,7 @@ class PointFoot:
         # set small commands to zero
         self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
 
+    # 计算关节力矩
     def _compute_torques(self, actions):
         """ Compute torques from actions.
             Actions can be interpreted as position or velocity targets given to a PD controller, or directly as scaled torques.
@@ -510,6 +538,7 @@ class PointFoot:
             raise NameError(f"Unknown controller type: {control_type}")
         return torch.clip(torques, -self.torque_limits, self.torque_limits)
 
+    # 重置关节状态
     def _reset_dofs(self, env_ids):
         """ Resets DOF position and velocities of selected environments
         Positions are randomly selected within 0.5:1.5 x default positions.
@@ -527,6 +556,7 @@ class PointFoot:
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
+    # 重置根状态
     def _reset_root_states(self, env_ids):
         """ Resets ROOT states position and velocities of selected environments
             Sets base position based on the curriculum
@@ -551,6 +581,7 @@ class PointFoot:
                                                      gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
 
+    # 推机器人（施加外力）
     def _push_robots(self):
         """Random pushes the robots."""
         max_push_force = (
@@ -574,6 +605,7 @@ class PointFoot:
             gymapi.ENV_SPACE,
         )
 
+    # 更新地形课程
     def _update_terrain_curriculum(self, env_ids):
         """ Implements the game-inspired curriculum.
 
@@ -599,6 +631,7 @@ class PointFoot:
                                                               0))  # (the minumum level is zero)
         self.env_origins[env_ids] = self.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
 
+    # 更新命令课程
     def update_command_curriculum(self, env_ids):
         """ Implements a curriculum of increasing commands
 
@@ -613,6 +646,7 @@ class PointFoot:
             self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0.,
                                                           self.cfg.commands.max_curriculum)
 
+    # 获取观测噪声缩放向量
     def _get_noise_scale_vec(self):
         """ Sets a vector used to scale the noise added to the observations.
             [NOTE]: Must be adapted when changing the observations structure
@@ -659,6 +693,7 @@ class PointFoot:
         return obs_noise_vec, privileged_extra_obs_noise_vec
 
     # ----------------------------------------
+    # 初始化缓存
     def _init_buffers(self):
         """ Initialize torch tensors which will contain simulation states and processed quantities
         """
@@ -757,6 +792,7 @@ class PointFoot:
                     print(f"PD gain of joint {name} were not defined, setting them to zero")
         self.default_dof_pos = self.default_dof_pos.unsqueeze(0)
 
+    # 奖励函数准备
     def _prepare_reward_function(self):
         """ Prepares a list of reward functions, whcih will be called to compute the total reward.
             Looks for self._reward_<REWARD_NAME>, where <REWARD_NAME> are names of all non zero reward scales in the cfg.
@@ -783,6 +819,7 @@ class PointFoot:
             name: torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
             for name in self.reward_scales.keys()}
 
+    # 创建地面平面
     def _create_ground_plane(self):
         """ Adds a ground plane to the simulation, sets friction and restitution based on the cfg.
         """
@@ -793,6 +830,7 @@ class PointFoot:
         plane_params.restitution = self.cfg.terrain.restitution
         self.gym.add_ground(self.sim, plane_params)
 
+    # 创建高度场地形
     def _create_heightfield(self):
         """ Adds a heightfield terrain to the simulation, sets parameters based on the cfg.
         """
@@ -813,6 +851,7 @@ class PointFoot:
         self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows,
                                                                             self.terrain.tot_cols).to(self.device)
 
+    # 创建三角网格地形
     def _create_trimesh(self):
         """ Adds a triangle mesh terrain to the simulation, sets parameters based on the cfg.
         # """
@@ -831,6 +870,7 @@ class PointFoot:
         self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows,
                                                                             self.terrain.tot_cols).to(self.device)
 
+    # 创建所有环境
     def _create_envs(self):
         """ Creates environments:
              1. loads the robot URDF/MJCF asset,
@@ -930,6 +970,7 @@ class PointFoot:
                                                                                         self.actor_handles[0],
                                                                                         termination_contact_names[i])
 
+    # 获取环境原点
     def _get_env_origins(self):
         """ Sets environment origins. On rough terrain the origins are defined by the terrain platforms.
             Otherwise create a grid.
@@ -959,6 +1000,7 @@ class PointFoot:
             self.env_origins[:, 1] = spacing * yy.flatten()[:self.num_envs]
             self.env_origins[:, 2] = 0.
 
+    # 解析配置
     def _parse_cfg(self):
         self.dt = self.cfg.control.decimation * self.sim_params.dt
         self.obs_scales = self.cfg.normalization.obs_scales
@@ -971,6 +1013,7 @@ class PointFoot:
 
         self.cfg.domain_rand.push_interval = np.ceil(self.cfg.domain_rand.push_interval_s / self.dt)
 
+    # 绘制调试可视化
     def _draw_debug_vis(self):
         """ Draws visualizations for dubugging (slows down simulation a lot).
             Default behaviour: draws height measurement points
@@ -992,6 +1035,7 @@ class PointFoot:
                 sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose)
 
+    # 初始化高度采样点
     def _init_height_points(self):
         """ Returns points at which the height measurments are sampled (in base frame)
 
@@ -1008,6 +1052,7 @@ class PointFoot:
         points[:, :, 1] = grid_y.flatten()
         return points
 
+    # 获取高度信息
     def _get_heights(self, env_ids=None):
         """ Samples heights of the terrain at required points around each robot.
             The points are offset by the base's position and rotated by the base's yaw
@@ -1037,6 +1082,7 @@ class PointFoot:
 
         return heights.view(self.num_envs, -1) * self.terrain.cfg.vertical_scale
 
+    # 获取足下高度
     def _get_heights_below_foot(self):
         """ Samples heights of the terrain at required points around each foot.
 
@@ -1060,6 +1106,7 @@ class PointFoot:
 
         return heights.view(self.num_envs, -1) * self.terrain.cfg.vertical_scale
 
+    # 从点获取地形高度
     def _get_terrain_heights_from_points(self, points):
         points = points + self.terrain.cfg.border_size
         points = (points / self.terrain.cfg.horizontal_scale).long()
@@ -1074,6 +1121,7 @@ class PointFoot:
         heights = torch.min(heights, heights3)
         return heights
 
+    # 计算足部状态
     def _compute_feet_states(self):
         self.feet_state = self.rigid_body_states[:, self.feet_indices, :]
         self.last_feet_air_time = self.feet_air_time * self.first_contact + self.last_feet_air_time * ~self.first_contact
@@ -1092,37 +1140,46 @@ class PointFoot:
         self.feet_air_time += self.dt
 
     # ------------ reward functions----------------
+    # 奖励函数：基础角速度xy惩罚
     def _reward_ang_vel_xy(self):
         # Penalize xy axes base angular velocity
         return torch.sum(torch.square(self.base_ang_vel[:, :2]), dim=1)
+    
 
+    # 奖励函数：基础高度惩罚
     def _reward_base_height(self):
         # Penalize base height away from target
         base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
         return torch.square(base_height - self.cfg.rewards.base_height_target)
 
+    # 奖励函数：力矩惩罚
     def _reward_torques(self):
         # Penalize torques
         return torch.sum(torch.square(self.torques), dim=1)
 
+    # 奖励函数：关节加速度惩罚
     def _reward_dof_acc(self):
         # Penalize dof accelerations
         return torch.sum(torch.square((self.last_dof_vel - self.dof_vel) / self.dt), dim=1)
 
+    # 奖励函数：动作变化惩罚
     def _reward_action_rate(self):
         # Penalize changes in actions
         return torch.sum(torch.square(self.last_actions - self.actions), dim=1)
 
+    # 奖励函数：碰撞惩罚
     def _reward_collision(self):
         # Penalize collisions on selected bodies
         return torch.sum(1. * (torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1),
                          dim=1)
 
+    # 奖励函数：力矩极限惩罚
     def _reward_torque_limits(self):
         # penalize torques too close to the limit
         return torch.sum(
             (torch.abs(self.torques) - self.torque_limits * self.cfg.rewards.soft_torque_limit).clip(min=0.), dim=1)
 
+    # 奖励函数：足部空中时间奖励
     def _reward_feet_air_time(self):
         # Reward steps between proper duration
         rew_airTime_below_min = torch.sum(
@@ -1136,6 +1193,7 @@ class PointFoot:
         rew_airTime = rew_airTime_below_min + rew_airTime_above_max
         return rew_airTime
 
+    # 奖励函数：足间距离奖励
     def _reward_feet_distance(self):
         reward = 0
         for i in range(self.feet_state.shape[1] - 1):
@@ -1146,5 +1204,6 @@ class PointFoot:
             reward += torch.clip(self.cfg.rewards.min_feet_distance - feet_distance, 0, 1)
         return reward
 
+    # 奖励函数：存活奖励
     def _reward_survival(self):
         return (~self.reset_buf).float()
